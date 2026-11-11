@@ -1,0 +1,14 @@
+{
+  "name": "ai-naming-vercel",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "AI 起名 · Vercel Node Function + Kimi 流式输出 + Supabase 落库",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "dev": "vercel dev",
+    "deploy": "vercel --prod"
+  }
+}

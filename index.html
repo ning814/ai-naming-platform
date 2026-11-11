@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>AI 起名 · Kimi 流式生成</title>
+<meta name="description" content="输入姓氏与需求，AI 流式生成 3 组名字方案并附带寓意解释。" />
+<style>
+  :root {
+    --paper: #faf7f1;
+    --card: #ffffff;
+    --ink: #1b1a17;
+    --muted: #736b5e;
+    --line: #e7e0d3;
+    --accent: #2f6b58;
+    --accent-soft: #e8f1ec;
+    --gold: #b08334;
+    --shadow: 0 1px 2px rgba(27, 26, 23, .05), 0 12px 32px -12px rgba(27, 26, 23, .18);
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background:
+      radial-gradient(1200px 600px at 8% -10%, #f2ece1 0%, rgba(242, 236, 225, 0) 60%),
+      radial-gradient(900px 500px at 100% 0%, #eef2ee 0%, rgba(238, 242, 238, 0) 55%),
+      var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", "Segoe UI", sans-serif;
+    line-height: 1.6;
+    min-height: 100vh;
+  }
+  .wrap { max-width: 1120px; margin: 0 auto; padding: 40px 20px 72px; }
+
+  header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 28px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .seal {
+    width: 42px; height: 42px; border-radius: 12px; display: grid; place-items: center;
+    background: var(--accent); color: #fff; font-family: "Songti SC", "SimSun", serif;
+    font-size: 20px; font-weight: 700; letter-spacing: 0; box-shadow: 0 6px 16px -6px rgba(47, 107, 88, .6);
+  }
+  h1 { font-size: 22px; margin: 0; letter-spacing: .5px; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 0; }
+  .model-tag {
+    font-size: 12px; color: var(--accent); background: var(--accent-soft);
+    border: 1px solid #cfe2d8; border-radius: 999px; padding: 5px 12px; white-space: nowrap;
+  }
+
+  .grid { display: grid; grid-template-columns: 380px minmax(0, 1fr); gap: 20px; align-items: start; }
+  @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } }
+
+  .card {
+    background: var(--card); border: 1px solid var(--line); border-radius: 18px;
+    padding: 22px; box-shadow: var(--shadow);
+  }
+
+  .field { margin-bottom: 18px; }
+  .label { display: flex; align-items: center; justify-content: space-between; font-size: 13px; color: var(--muted); margin-bottom: 8px; letter-spacing: .3px; }
+  .label em { font-style: normal; font-size: 11px; color: #a99e8d; }
+
+  input[type="text"], textarea, select {
+    width: 100%; font: inherit; font-size: 15px; color: var(--ink);
+    background: #fdfbf7; border: 1px solid var(--line); border-radius: 12px;
+    padding: 11px 13px; outline: none; transition: border-color .15s, box-shadow .15s;
+  }
+  input[type="text"]:focus, textarea:focus, select:focus {
+    border-color: #a9c8ba; box-shadow: 0 0 0 3px rgba(47, 107, 88, .1); background: #fff;
+  }
+  textarea { resize: vertical; min-height: 88px; line-height: 1.65; }
+  ::placeholder { color: #b3aa9b; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
+  .chip {
+    font-size: 13.5px; color: #4c463b; background: #fbf8f2; border: 1px solid var(--line);
+    border-radius: 999px; padding: 6px 14px; cursor: pointer; transition: all .15s; user-select: none;
+  }
+  .chip:hover { border-color: #cfc6b6; }
+  .chip[aria-pressed="true"] { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  button.primary {
+    width: 100%; font: inherit; font-size: 15px; font-weight: 600; letter-spacing: .5px;
+    color: #fff; background: var(--accent); border: none; border-radius: 12px;
+    padding: 13px 16px; cursor: pointer; transition: transform .12s, box-shadow .2s, background .2s;
+    box-shadow: 0 10px 22px -12px rgba(47, 107, 88, .9);
+    display: flex; align-items: center; justify-content: center; gap: 9px;
+  }
+  button.primary:hover:not(:disabled) { background: #2a5f4e; }
+  button.primary:active:not(:disabled) { transform: translateY(1px); }
+  button.primary:disabled { opacity: .62; cursor: not-allowed; box-shadow: none; }
+  .spinner {
+    width: 15px; height: 15px; border-radius: 50%;
+    border: 2px solid rgba(255,255,255,.42); border-top-color: #fff;
+    animation: spin .8s linear infinite; display: none;
+  }
+  button.primary.loading .spinner { display: inline-block; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .hint { font-size: 12px; color: #a1978a; text-align: center; margin-top: 10px; }
+
+  /* 右侧结果区 */
+  .result { min-height: 420px; display: flex; flex-direction: column; }
+  .result-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 16px; }
+  .result-title { font-size: 13px; color: var(--muted); letter-spacing: 1px; }
+  .status { font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 6px; }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: #c9c0b0; }
+  .dot.live { background: var(--gold); box-shadow: 0 0 0 4px rgba(176, 131, 52, .16); animation: pulse 1.4s infinite; }
+  .dot.ok { background: #2f8a5f; }
+  .dot.warn { background: #c0703a; }
+  @keyframes pulse { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
+
+  .empty { flex: 1; display: grid; place-items: center; text-align: center; color: #a79d8e; }
+  .empty .mark { font-family: "Songti SC", "SimSun", serif; font-size: 54px; color: #e3dacb; line-height: 1; margin-bottom: 14px; }
+  .empty p { margin: 0; font-size: 13.5px; max-width: 300px; }
+
+  .stream {
+    flex: 1; white-space: pre-wrap; word-break: break-word; font-size: 15.5px; line-height: 1.95;
+    color: #2b2924; background: #fdfbf6; border: 1px dashed #e3dacb; border-radius: 14px;
+    padding: 20px 22px; display: none; overflow-y: auto; max-height: 560px;
+  }
+  .stream.active { display: block; }
+  .caret { display: inline-block; width: 2px; height: 1.05em; background: var(--accent); vertical-align: -2px; margin-left: 2px; animation: blink 1s steps(2) infinite; }
+  @keyframes blink { 50% { opacity: 0; } }
+
+  .plans { display: none; flex-direction: column; gap: 14px; }
+  .plans.active { display: flex; animation: rise .35s ease both; }
+  @keyframes rise { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+  .plan {
+    border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px;
+    background: linear-gradient(180deg, #fffdf9 0%, #ffffff 100%);
+    position: relative; overflow: hidden;
+  }
+  .plan::before {
+    content: ""; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+    background: linear-gradient(180deg, var(--accent), #86b3a1);
+  }
+  .plan-top { display: flex; align-items: baseline; gap: 12px; }
+  .idx { font-size: 11px; color: var(--accent); background: var(--accent-soft); border-radius: 6px; padding: 2px 8px; letter-spacing: .5px; white-space: nowrap; }
+  .name {
+    font-family: "Songti SC", "SimSun", "Source Han Serif SC", serif;
+    font-size: 27px; font-weight: 700; letter-spacing: 3px; line-height: 1.4;
+  }
+  .meaning { margin-top: 8px; font-size: 14.5px; color: #57503f; line-height: 1.85; }
+
+  .meta { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 10px 18px; font-size: 12px; color: #9a9082; }
+  .meta .k { color: #7d7466; }
+  .meta .v { color: #4f4838; }
+  .meta .err { color: #b4632f; }
+
+  .foot { margin-top: 28px; text-align: center; font-size: 12px; color: #aaa08f; }
+  .foot a { color: #8d8375; text-decoration: none; border-bottom: 1px solid #ddd4c5; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="brand">
+      <div class="seal">名</div>
+      <div>
+        <h1>AI 起名</h1>
+        <p class="sub">输入需求，流式生成 3 组名字方案 · 每组附寓意解释</p>
+      </div>
+    </div>
+    <span class="model-tag" id="modelTag">4 个模型可切换</span>
+  </header>
+
+  <div class="grid">
+    <!-- 表单 -->
+    <section class="card">
+      <form id="form">
+        <div class="field">
+          <div class="label"><span>生成模型</span><em id="modelHint">加载中…</em></div>
+          <select id="model">
+            <option value="">正在读取模型配置…</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <div class="label"><span>姓氏 / 主体名</span><em>可留空</em></div>
+          <input type="text" id="surname" maxlength="20" placeholder="如：李、林，或品牌名「鹿野」" autocomplete="off" />
+        </div>
+
+        <div class="field">
+          <div class="label"><span>用途</span></div>
+          <div class="chips" id="typeChips">
+            <button type="button" class="chip" data-value="人名" aria-pressed="true">人名</button>
+            <button type="button" class="chip" data-value="品牌" aria-pressed="false">品牌</button>
+            <button type="button" class="chip" data-value="店铺" aria-pressed="false">店铺</button>
+            <button type="button" class="chip" data-value="宠物" aria-pressed="false">宠物</button>
+            <button type="button" class="chip" data-value="作品角色" aria-pressed="false">作品角色</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label"><span>性别倾向</span></div>
+          <div class="chips" id="genderChips">
+            <button type="button" class="chip" data-value="男" aria-pressed="false">男</button>
+            <button type="button" class="chip" data-value="女" aria-pressed="false">女</button>
+            <button type="button" class="chip" data-value="不限" aria-pressed="true">不限</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label"><span>风格偏好</span><em>可多选</em></div>
+          <div class="chips" id="styleChips">
+            <button type="button" class="chip" data-value="文雅诗意" aria-pressed="false">文雅诗意</button>
+            <button type="button" class="chip" data-value="现代简约" aria-pressed="false">现代简约</button>
+            <button type="button" class="chip" data-value="国风大气" aria-pressed="false">国风大气</button>
+            <button type="button" class="chip" data-value="清冷独特" aria-pressed="false">清冷独特</button>
+            <button type="button" class="chip" data-value="温暖亲切" aria-pressed="false">温暖亲切</button>
+            <button type="button" class="chip" data-value="英文名" aria-pressed="false">英文名</button>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label"><span>名字字数</span></div>
+          <div class="row">
+            <select id="length">
+              <option value="">不限</option>
+              <option value="单字">单字</option>
+              <option value="双字" selected>双字</option>
+              <option value="三字">三字</option>
+            </select>
+            <div style="display:flex;align-items:center;font-size:12.5px;color:#a1978a">按用途自动适配亦可</div>
+          </div>
+        </div>
+
+        <div class="field">
+          <div class="label"><span>补充需求</span><em>0 / 300</em></div>
+          <textarea id="extra" maxlength="300" placeholder="如：希望带草木意象、读音响亮、避开生僻字，忌用「涵」「梓」…"></textarea>
+        </div>
+
+        <button type="submit" class="primary" id="submitBtn">
+          <span class="spinner"></span><span id="btnText">生成 3 组名字</span>
+        </button>
+        <p class="hint">Ctrl / ⌘ + Enter 快速提交</p>
+      </form>
+    </section>
+
+    <!-- 结果 -->
+    <section class="card result">
+      <div class="result-head">
+        <span class="result-title">生成结果</span>
+        <span class="status" id="status"><span class="dot" id="statusDot"></span><span id="statusText">等待输入</span></span>
+      </div>
+
+      <div class="empty" id="empty">
+        <div>
+          <div class="mark">名</div>
+          <p>填写左侧条件后点击生成，结果会逐字实时出现</p>
+        </div>
+      </div>
+
+      <div class="stream" id="stream"><span id="streamText"></span><span class="caret" id="caret"></span></div>
+      <div class="plans" id="plans"></div>
+
+      <div class="meta" id="meta" style="display:none"></div>
+    </section>
+  </div>
+
+  <p class="foot">结果已自动存入 Supabase · 密钥仅保存在服务端环境变量</p>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const form = $('form');
+  const btn = $('submitBtn');
+  const btnText = $('btnText');
+  const stream = $('stream');
+  const streamText = $('streamText');
+  const caret = $('caret');
+  const plans = $('plans');
+  const empty = $('empty');
+  const meta = $('meta');
+  const statusDot = $('statusDot');
+  const statusText = $('statusText');
+
+  // 单选 chip 组
+  function singleSelect(groupId, onChange) {
+    const group = $(groupId);
+    group.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      group.querySelectorAll('.chip').forEach((c) => c.setAttribute('aria-pressed', 'false'));
+      chip.setAttribute('aria-pressed', 'true');
+      onChange && onChange(chip.dataset.value);
+    });
+  }
+  // 多选 chip 组
+  function multiSelect(groupId) {
+    const group = $(groupId);
+    group.addEventListener('click', (e) => {
+      const chip = e.target.closest('.chip');
+      if (!chip) return;
+      chip.setAttribute('aria-pressed', chip.getAttribute('aria-pressed') === 'true' ? 'false' : 'true');
+    });
+  }
+  singleSelect('typeChips');
+  singleSelect('genderChips');
+  multiSelect('styleChips');
+
+  const selectedOne = (groupId) => {
+    const chip = $(groupId).querySelector('.chip[aria-pressed="true"]');
+    return chip ? chip.dataset.value : '';
+  };
+  const selectedMany = (groupId) =>
+    Array.from($(groupId).querySelectorAll('.chip[aria-pressed="true"]')).map((c) => c.dataset.value);
+
+  // ---- 模型下拉框：从后端 modelConfigMap 读取，避免前端硬编码 ----
+  let modelsInfo = [];
+  const modelSelect = $('model');
+  const modelHint = $('modelHint');
+
+  function updateModelHint() {
+    const cur = modelsInfo.find((m) => m.key === modelSelect.value);
+    if (!cur) {
+      modelHint.textContent = '';
+      modelHint.style.color = '#a99e8d';
+      return;
+    }
+    if (cur.configured) {
+      modelHint.textContent = cur.model;
+      modelHint.style.color = '#a99e8d';
+    } else {
+      modelHint.textContent = '未配置密钥';
+      modelHint.style.color = '#c0703a';
+    }
+  }
+
+  async function loadModels() {
+    try {
+      const resp = await fetch('/api/name');
+      const data = await resp.json();
+      modelsInfo = data.models || [];
+      modelSelect.innerHTML = '';
+      modelsInfo.forEach((m) => {
+        const opt = document.createElement('option');
+        opt.value = m.key;
+        opt.textContent = m.label + (m.configured ? '' : '（未配置密钥）');
+        opt.dataset.configured = String(m.configured);
+        modelSelect.appendChild(opt);
+      });
+      // 优先选第一个已配置的模型，其次用后端默认值
+      const firstReady = modelsInfo.find((m) => m.configured);
+      const fallback = modelsInfo.find((m) => m.key === data.defaultModel);
+      modelSelect.value = (firstReady || fallback || modelsInfo[0] || {}).key || '';
+      updateModelHint();
+    } catch (err) {
+      modelHint.textContent = '模型列表读取失败';
+      modelHint.style.color = '#c0703a';
+    }
+  }
+
+  modelSelect.addEventListener('change', updateModelHint);
+  loadModels();
+
+  function setStatus(text, kind) {
+    statusText.textContent = text;
+    statusDot.className = 'dot' + (kind ? ' ' + kind : '');
+  }
+
+  function resetUI() {
+    stream.classList.remove('active');
+    plans.classList.remove('active');
+    plans.innerHTML = '';
+    streamText.textContent = '';
+    empty.style.display = 'none';
+    meta.style.display = 'none';
+    meta.innerHTML = '';
+    stream.appendChild(caret);
+  }
+
+  function escapeHtml(s) {
+    return s.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  }
+
+  // 前端兜底解析（服务端未返回结构化数据时使用）
+  function parseGroups(text) {
+    const out = [];
+    text.split('\n').forEach((raw) => {
+      const line = raw.trim();
+      if (!line) return;
+      let m = line.match(/^第\s*[一二三1-3]\s*组\s*[：:]\s*(.*)$/);
+      if (m) {
+        const name = m[1].replace(/[。，,；;、\s]+$/, '').trim();
+        if (name) out.push({ name: name, meaning: '' });
+        return;
+      }
+      m = line.match(/^寓\s*意\s*[：:]\s*(.*)$/);
+      if (m && out.length) {
+        const last = out[out.length - 1];
+        last.meaning = (last.meaning ? last.meaning + ' ' : '') + m[1].trim();
+      }
+    });
+    return out.slice(0, 3);
+  }
+
+  function renderPlans(names) {
+    plans.innerHTML = '';
+    names.forEach((item, i) => {
+      const el = document.createElement('div');
+      el.className = 'plan';
+      el.innerHTML =
+        '<div class="plan-top">' +
+          '<span class="idx">方案 ' + (i + 1) + '</span>' +
+          '<span class="name">' + escapeHtml(item.name) + '</span>' +
+        '</div>' +
+        '<div class="meaning">' + escapeHtml(item.meaning || '（模型未给出寓意说明）') + '</div>';
+      plans.appendChild(el);
+    });
+    stream.classList.remove('active');
+    plans.classList.add('active');
+  }
+
+  function renderMeta(data) {
+    const rows = [];
+    const modelText = [data.modelLabel, data.model].filter(Boolean).join(' · ') || '—';
+    rows.push('<span><span class="k">模型</span> <span class="v">' + escapeHtml(modelText) + '</span></span>');
+    if (data.saved) {
+      rows.push('<span><span class="k">已写入 Supabase</span> <span class="v">id ' + escapeHtml(String(data.recordId || 'ok')) + '</span></span>');
+    } else {
+      rows.push('<span class="err">未写入数据库：' + escapeHtml(data.saveError || '未知原因') + '</span>');
+    }
+    if (data.streamError) rows.push('<span class="err">流中断：' + escapeHtml(data.streamError) + '</span>');
+    rows.push('<span><span class="k">需求</span> <span class="v">' + escapeHtml(data.requirement || '—') + '</span></span>');
+    meta.innerHTML = rows.join('');
+    meta.style.display = 'flex';
+  }
+
+  async function onSubmit(e) {
+    if (e) e.preventDefault();
+    if (btn.disabled) return;
+
+    const payload = {
+      model: modelSelect.value,
+      surname: $('surname').value.trim(),
+      type: selectedOne('typeChips'),
+      gender: selectedOne('genderChips'),
+      style: selectedMany('styleChips'),
+      length: $('length').value,
+      extra: $('extra').value.trim()
+    };
+
+    if (!payload.surname && !payload.extra && !payload.style.length) {
+      setStatus('条件太少，至少填一项', 'warn');
+      $('surname').focus();
+      return;
+    }
+
+    resetUI();
+    btn.disabled = true;
+    btn.classList.add('loading');
+    btnText.textContent = '生成中…';
+    setStatus('正在生成', 'live');
+    stream.classList.add('active');
+
+    let raw = '';
+    let metaData = null;
+
+    try {
+      const resp = await fetch('/api/name', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!resp.ok || !resp.body) {
+        let msg = '请求失败（' + resp.status + '）';
+        try {
+          const j = await resp.json();
+          if (j && j.error) msg = j.error;
+        } catch (err) { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      let inMeta = false; // 已完成正文，正在接收 \u0000 之后的元信息 JSON
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        if (inMeta) {
+          // 元信息是完整 JSON，可能跨多个 chunk，收齐再解析
+          try { metaData = JSON.parse(buffer.trim()); } catch (err) { /* 等待更多数据 */ }
+          if (metaData) break;
+          continue;
+        }
+
+        const sep = buffer.indexOf('\u0000');
+        if (sep === -1) {
+          raw += buffer;                 // 纯正文片段
+          buffer = '';
+          streamText.textContent = raw;
+        } else {
+          raw += buffer.slice(0, sep);   // 分隔符之前全是正文
+          streamText.textContent = raw;
+          buffer = buffer.slice(sep + 1);
+          inMeta = true;
+          if (buffer.trim()) {
+            try { metaData = JSON.parse(buffer.trim()); } catch (err) { /* 等待更多数据 */ }
+          }
+          if (metaData) break;
+        }
+      }
+
+      // 收尾：正文或元信息在最后一个 chunk 里没有解析成功
+      if (!inMeta && buffer) {
+        raw += buffer;
+        streamText.textContent = raw;
+        buffer = '';
+      }
+      if (!metaData && inMeta && buffer.trim()) {
+        try { metaData = JSON.parse(buffer.trim()); } catch (err) { /* ignore */ }
+      }
+      if (!metaData) {
+        // 服务端未给出元信息（例如极早断开），按正文自行还原
+        metaData = { model: 'kimi-k3.1-pro', names: parseGroups(raw), saved: false, saveError: '未收到服务端元信息' };
+      }
+
+      if (raw.trim()) {
+        streamText.textContent = raw.trim();
+      }
+
+      if (metaData.names && metaData.names.length) {
+        renderPlans(metaData.names);
+      } else {
+        const fallback = parseGroups(raw);
+        if (fallback.length) renderPlans(fallback);
+      }
+
+      renderMeta(metaData);
+      setStatus(metaData.saved ? '已保存' : '已生成 · 未入库', metaData.saved ? 'ok' : 'warn');
+      if (metaData.modelLabel || metaData.model) {
+        $('modelTag').textContent = metaData.modelLabel || metaData.model;
+      }
+    } catch (err) {
+      stream.classList.add('active');
+      streamText.textContent = raw + (raw ? '\n\n' : '') + '出错了：' + err.message;
+      setStatus('生成失败', 'warn');
+    } finally {
+      caret.remove();
+      btn.disabled = false;
+      btn.classList.remove('loading');
+      btnText.textContent = '再次生成';
+    }
+  }
+
+  form.addEventListener('submit', onSubmit);
+  $('extra').addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') onSubmit();
+  });
+})();
+</script>
+</body>
+</html>
