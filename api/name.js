@@ -123,14 +123,20 @@ async function saveRecord({ requirement, names, modelName, rawText }) {
   }
 
   try {
+    // 新版 sb_secret_ 密钥不是 JWT，只能放在 apikey 头；放到 Authorization 会被判定 Invalid JWT。
+    // 旧版 service_role JWT（eyJ...）两个头都发，兼容性最好。
+    const headers = {
+      'Content-Type': 'application/json',
+      apikey: key,
+      Prefer: 'return=representation',
+    };
+    if (key.startsWith('eyJ')) {
+      headers.Authorization = `Bearer ${key}`;
+    }
+
     const resp = await fetch(`${url}/rest/v1/${SUPABASE_TABLE}`, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        apikey: key,
-        Authorization: `Bearer ${key}`,
-        Prefer: 'return=representation',
-      },
+      headers,
       body: JSON.stringify({
         user_requirement: requirement, // 用户起名需求
         name_result: rawText,           // 名字方案（完整文本，含寓意）
